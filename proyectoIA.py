@@ -1,6 +1,7 @@
 from collections import deque
 import heapq
 
+# Constantes para celdas
 WALL = 1
 START = 2
 GOAL = 3
@@ -9,9 +10,18 @@ GOAL = 3
 # A) Lectura / utilidades
 # -------------------------
 
+# -------------------------
+# Funcion para verificar limites, retorna true si (r,c) esta dentro de la matriz n x n.
+# Ni las filas o las columnas pueden ser negativas y/o sobrepasar el tamaño de la matriz.
+# -------------------------
 def in_bounds(n, r, c):
     return 0 <= r < n and 0 <= c < n
 
+
+# -------------------------
+# Si el valor coincide con el que estamos buscando (el pasado por parametro como value), 
+# guardamos sus coordenadas en 'pos' con append y retornamos la lista de posiciones encontradas.
+# -------------------------
 def find_value_positions(grid, value):
     """Devuelve lista de (r,c) donde grid[r][c] == value."""
     n = len(grid)
@@ -22,6 +32,10 @@ def find_value_positions(grid, value):
                 pos.append((r, c))
     return pos
 
+# -------------------------
+# Con esta funcion nos aseguramos de que solo haya una celda de inicio y una celda de meta.
+# Se lanza un error en el caso contrario. Retorna las coordenadas de start y goal.
+# -------------------------
 def get_start_goal(grid):
     """Encuentra exactamente un START=2 y un GOAL=3."""
     starts = find_value_positions(grid, START)
@@ -47,33 +61,41 @@ def matrix_to_graph(grid):
     n = len(grid)
     graph = {}
 
+    # Movimientos posibles: abajo, arriba, derecha, izquierda
     directions = [(1,0), (-1,0), (0,1), (0,-1)]  # 4-dir
 
+    # Recorremos cada celda, si no es pared, la agregamos al grafo y conectamos con vecinos válidos.
     for r in range(n):
         for c in range(n):
             if grid[r][c] == WALL:
                 continue
-
+            # Agregamos nodo al grafo
             node = (r, c)
             graph[node] = []
-
+            # Conectamos con vecinos válidos
             for dr, dc in directions:
                 nr, nc = r + dr, c + dc
                 if in_bounds(n, nr, nc) and grid[nr][nc] != WALL:
+                    # Agregamos arista con costo 1
                     graph[node].append(((nr, nc), 1))  # costo 1 por paso
-
+    
     return graph
 
 # -------------------------
 # D) Reconstrucción de ruta
 # -------------------------
 
+# -------------------------
+# Esta función se encarga de reconstruir la ruta desde el goal hasta el start usando un diccionario de padres (parent).
+# -------------------------
 def reconstruct_path(parent, goal):
     """Reconstruye ruta desde goal usando parent dict, devuelve lista start->goal o None."""
     if goal not in parent:
         return None
+    
     path = []
     cur = goal
+    # Recorremos hacia atrás desde el goal hasta el start usando el diccionario de padres.
     while cur is not None:
         path.append(cur)
         cur = parent[cur]
@@ -87,7 +109,7 @@ def print_path(path, title="Ruta"):
         print(f"{title} (len={len(path)}): {path}")
 
 # -------------------------
-# C1) BFS
+# C1) BFS (Búsqueda en anchura})
 # -------------------------
 
 def bfs(graph, start, goal):
@@ -97,9 +119,10 @@ def bfs(graph, start, goal):
 
     while cola:
         u = cola.popleft()
+        # Si u es la meta reconstruirmos la ruta
         if u == goal:
             return reconstruct_path(parent, goal)
-
+        # Recorremos vecinos de u, si no han sido visitados, los marcamos como visitados, guardamos su padre y los agregamos a la cola.
         for v, cost in graph.get(u, []):
             if v not in visited:
                 visited.add(v)
@@ -109,20 +132,26 @@ def bfs(graph, start, goal):
     return None
 
 # -------------------------
-# C2) DFS
+# C2) DFS (Búsqueda por profundidad)
 # -------------------------
 
 def dfs(graph, start, goal):
+    # Se usa un stack porque funciona como LIFO, lo que hace que exploremos más profundo antes de explorar vecinos.
     stack = [start]
+    # Se tienen en cuenta los ya visitados
     visited = set([start])
+    # Para reconstruir la ruta
     parent = {start: None}
 
     while stack:
+        # Mientras que haya algo en el stack, sacamos el último elemento agregado (el más profundo) y lo asignamos a u.
         u = stack.pop()
+        # Si encontarmos la meta, reconstruimos ruta
         if u == goal:
             return reconstruct_path(parent, goal)
 
-        # Nota: el orden de vecinos afecta el camino que te sale en DFS.
+        # El orden de vecinos afecta el camino que saldrá en DFS porque se explora el último vecino agregado primero. 
+        # En este caso, el orden de las direcciones es abajo, arriba, derecha, izquierda.
         for v, cost in graph.get(u, []):
             if v not in visited:
                 visited.add(v)
@@ -136,8 +165,10 @@ def dfs(graph, start, goal):
 # -------------------------
 
 def heuristic_manhattan(node, goal):
+    # La heurística Manhattan calcula la distancia entre dos puntos en una cuadrícula basada en movimientos horizontales y verticales.
     r, c = node
     rg, cg = goal
+    # Se retorna la suma de las diferencias absolutas de las filas y columnas entre el nodo actual y el nodo objetivo.
     return abs(r - rg) + abs(c - cg)
 
 # -------------------------
@@ -154,27 +185,33 @@ def a_star(graph, start, goal, h_func=heuristic_manhattan):
     open_heap = []
     heapq.heappush(open_heap, (h_func(start, goal), 0, start))
 
+    # Aqui se guarda el nodo padre para cada nodo visitado, lo que permite reconstruir la ruta al llegar al goal.
     parent = {start: None}
     g_score = {start: 0}
-
+    # Se cierra el nodo una vez que se ha procesado completamente, lo que significa que se han explorado todos sus 
+    # vecinos y se ha actualizado el g_score de esos vecinos si es necesario. Esto evita que se vuelva a procesar un nodo ya cerrado,
+    # lo que mejora la eficiencia del algoritmo.
     closed = set()
-
+    # Mientras haya nodos en el open set, se procesa el nodo con el menor f(n) (costo total estimado) y se expande sus vecinos.
     while open_heap:
         f, g, u = heapq.heappop(open_heap)
-
+        # si el nodo u ya ha sido cerrado, se ignora y se continúa con el siguiente nodo en el open set. 
+        # Esto es importante para evitar procesar nodos que ya han sido completamente explorados, lo que mejora la eficiencia del algoritmo.
         if u in closed:
             continue
         closed.add(u)
-
+        # Si u es el nodo objetivo (goal), se reconstruye y retorna la ruta desde el start hasta el goal utilizando 
+        # el diccionario de padres (parent).
         if u == goal:
             return reconstruct_path(parent, goal)
-
+        # Se recorren los vecinos de u, y para cada vecino v se calcula el costo tentativo g(n) desde el start hasta v pasando por u.
         for v, cost in graph.get(u, []):
             tentative_g = g_score[u] + cost
-
+            # Si v ya ha sido cerrado y el costo tentativo g(n) es mayor o igual al g_score registrado para v, 
+            # se ignora este vecino porque ya se ha encontrado una ruta más corta a v.
             if v in closed and tentative_g >= g_score.get(v, float("inf")):
                 continue
-
+            # Si el costo tentativo g(n) es menor que el g_score registrado para v, se actualiza el padre de v a u, se actualiza el g_score de v,
             if tentative_g < g_score.get(v, float("inf")):
                 parent[v] = u
                 g_score[v] = tentative_g
@@ -187,6 +224,8 @@ def a_star(graph, start, goal, h_func=heuristic_manhattan):
 # E) Main / Orquestación
 # -------------------------
 
+# La función solve se encarga de orquestar todo el proceso: encuentra el start y goal, 
+# convierte la matriz a grafo, ejecuta los algoritmos de búsqueda y muestra los resultados.
 def solve(grid):
     start, goal = get_start_goal(grid)
     graph = matrix_to_graph(grid)
@@ -206,7 +245,8 @@ def solve(grid):
     return path_bfs, path_dfs, path_astar
 
 
-
+# Lo que se hace aquí es tomar la ruta encontrada por cada algoritmo y superponerla en el laberinto original, 
+# marcando las celdas del camino con un símbolo (en este caso '*') para facilitar su visualización.
 def overlay_path_on_grid(grid, path):
     if path is None:
         return grid
@@ -224,7 +264,9 @@ def print_grid(grid):
 
 
 
-
+# En esta sección se define un laberinto de ejemplo como una matriz de 10x10, donde 0 representa celdas libres, 1 representa paredes,
+# 2 representa el punto de inicio y 3 representa el punto de meta. Luego se llama a la función solve para encontrar las rutas utilizando 
+# BFS, DFS y A*, y finalmente se imprime el laberinto con las rutas superpuestas para cada algoritmo.    
 # -------------------------
 # Ejemplo de uso
 # -------------------------
